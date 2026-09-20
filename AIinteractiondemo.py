@@ -19,7 +19,7 @@ def query_available_lm():
             idlist.append(r.get('id'))
         return idlist
     except:
-        print("Error")
+        print("Error: Ensure LMstudio is running and server is selected!")
         return []
 
 def model_selector():
