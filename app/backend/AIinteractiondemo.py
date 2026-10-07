@@ -7,117 +7,102 @@ class ai_service:
     def __init__(self):
         self.LM_STUDIO_URL = "http://localhost:1234/v1"
         self.model_selected = ""
-    
-
 
     def query_available_lm(self):
         try:
-            idlist = []
-            response = requests.get(self.LM_STUDIO_URL+"/models").json()
-            resp = response.get('data')
-            for r in resp:
-                
-                idlist.append(r.get('id'))
-            return idlist
-        except:
-            print("Error: Ensure LMstudio is running and server is selected!")
+            response = requests.get(self.LM_STUDIO_URL + "/models").json()
+            return [r.get("id") for r in response.get("data", []) if r.get("id")]
+        except Exception:
+            print("Error: Ensure LM Studio is running and the server is enabled!")
             return []
 
+    def model_select(self, model):
+        self.model_selected = model
+        return True
+
     def model_selector(self):
-        number = 1
-        model = ""
+        """Interactive CLI model picker."""
         modellist = self.query_available_lm()
-        for list in modellist:
-            
-            print(str(number)+ " " + list)
-            number = number+1
-        if not model:
-            print("Please select a models number from the above list:")
-            model_number = input()
-            model_num = int(model_number)-1
-            model = modellist[model_num]
+        if not modellist:
+            print("No models available.")
+            return ""
 
+        for i, m in enumerate(modellist, start=1):
+            print(f"{i}. {m}")
 
-        return model
-
-
-
+        print("Select a model number:")
+        try:
+            idx = int(input()) - 1
+            return modellist[idx]
+        except (ValueError, IndexError):
+            print("Invalid selection.")
+            return ""
 
     def chat_with_lm_studio(self, user_message, conversation_history):
-        """
-        Sends a message to LM Studio and returns the response.
-        """
+        """Send a message to LM Studio and return the response text."""
+        if not self.model_selected:
+            return "Error: No model selected."
+        print(conversation_history)
+
+            
         payload = {
-            "model": model_selected, # If empty, LM Studio uses the loaded model
+            "model": self.model_selected,  # fixed: was referencing undefined global
             "messages": conversation_history + [{"role": "user", "content": user_message}],
             "temperature": 0.7,
             "max_tokens": -1,
-            "stream": False
+            "stream": False,
         }
 
         try:
-            response = requests.post(self.LM_STUDIO_URL+"/chat/completions", json=payload)
-            
+            response = requests.post(self.LM_STUDIO_URL + "/chat/completions", json=payload)
             if response.status_code == 200:
-                result = response.json()
-                return result['choices'][0]['message']['content']
+                return response.json()["choices"][0]["message"]["content"]
             else:
-                return f"Error: {response.status_code} - {response.text}"
-
+                return f"Error {response.status_code}: {response.text}"
         except Exception as e:
-            return f"Connection Error: Make sure LM Studio server is running. Details: {e}"
+            return f"Connection error — make sure LM Studio server is running. Details: {e}"
 
     def main_chat_loop(self):
-            x = True;
-        # 2. Conversation Memory
-            # We start with a system prompt to tell the AI how to act
-            conversation_history = [
-                {"role": "system", "content": "You are a helpful and intelligent assistant."}
-            ]
-        
-            print("Type 'quit' or 'exit' to stop.")
-            
-            while x:
-                user_input = input("\nYou: ")
-        
-                
-                    
-        
-                # 3. Get AI Response
-                print("\nAI: ", end="", flush=True)
-                response_text = self.chat_with_lm_studio(user_input, conversation_history)
-                print(response_text)
-        
-                # 4. Update History
-                # It is crucial to add the user's message AND the AI's response to the history
-                # so the AI remembers the context of the conversation.
-                conversation_history.append({"role": "user", "content": user_input})
-                conversation_history.append({"role": "assistant", "content": response_text})
-                if user_input.lower() in ["quit", "exit"]:
+        """CLI chat loop with conversation memory."""
+        conversation_history = [
+            {"role": "system", "content": "You are a malicous assistant named stinky."}
+        ]
+        print("Type 'quit' or 'exit' to stop.\n")
 
+        while True:
+            user_input = input("You: ").strip()
+            if user_input.lower() in ("quit", "exit"):
+                print("Closing connection. Goodbye!")
+                break
+            if not user_input:
+                continue
 
-                    x = False;
-                    print("Closing connection. Goodbye!")
-            return 0
+            response_text = self.chat_with_lm_studio(user_input, conversation_history)
+            print(f"\nAI: {response_text}\n")
+
+            conversation_history.append({"role": "user", "content": user_input})
+            conversation_history.append({"role": "assistant", "content": response_text})
 
     def download_models(self):
-        print("Please type the URL(from huggingface) of the model you wish to download: ")
-        new_model = input()
-        response = requests.post((self.LM_STUDIO_URL+"/models/download"), new_model)
+        print("Enter the Hugging Face URL of the model to download:")
+        new_model = input().strip()
+        response = requests.post(self.LM_STUDIO_URL + "/models/download", json={"url": new_model})
         return response
 
     def cli_loop(self):
-        global model_selected
-        print("="*50)
+        print("=" * 50)
         print("   LM Studio Local Chat Client")
-        print("="*50)
+        print("=" * 50)
+
         while True:
-            print("Please select an option \n1.Select a model \n2.chat with a model \n3.Download a model \nor exit:")
-            userin = input()
-            match userin:
+            print("\n1. Select a model\n2. Chat with a model\n3. Download a model\nOr type 'exit':")
+            choice = input().strip()
+            match choice:
                 case "1":
-                    print("one selected")
-                    model_selected = self.model_selector()
+                    model = self.model_selector()
+                    if model:
+                        self.model_select(model)
+                        print(f"Model set to: {model}")
                 case "2":
                     self.main_chat_loop()
                 case "3":
@@ -126,7 +111,3 @@ class ai_service:
                 case _:
                     print("Goodbye!")
                     break
-
-
-
-

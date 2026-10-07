@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% block content %}
+/*made with claude*/
+<style>
+  .chat-container {
+    max-width: 820px;
+    margin: 2rem auto;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: #1a1a2e;
+  }
+
+  /* Model selector bar */
+  .model-bar {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 1.25rem;
+  }
+
+  .model-bar select {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    background: #fff;
+    color: #1a1a2e;
+    cursor: pointer;
+  }
+
+  .model-bar button {
+    padding: 0.5rem 1.1rem;
+    background: #1a1a2e;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+
+  .model-bar button:hover { background: #2d2d4e; }
+
+  .active-model-label {
+    font-size: 0.8rem;
+    color: #6b7280;
+    margin-bottom: 1rem;
+  }
+
+  .active-model-label span {
+    font-weight: 600;
+    color: #1a1a2e;
+  }
+
+  /* Chat window */
+  #chat-window {
+    height: 420px;
+    overflow-y: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1rem;
+    background: #f9fafb;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    margin-bottom: 1rem;
+    scroll-behavior: smooth;
+  }
+
+  .message {
+    max-width: 75%;
+    padding: 0.65rem 0.95rem;
+    border-radius: 12px;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  .message.user {
+    align-self: flex-end;
+    background: #1a1a2e;
+    color: #fff;
+    border-bottom-right-radius: 3px;
+  }
+
+  .message.assistant {
+    align-self: flex-start;
+    background: #fff;
+    color: #1a1a2e;
+    border: 1px solid #e5e7eb;
+    border-bottom-left-radius: 3px;
+  }
+
+  .message.system-note {
+    align-self: center;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 0.78rem;
+    border: none;
+    padding: 0;
+  }
+
+  /* Typing indicator */
+  .typing-indicator {
+    align-self: flex-start;
+    display: flex;
+    gap: 4px;
+    padding: 0.65rem 0.95rem;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    border-bottom-left-radius: 3px;
+  }
+
+  .typing-indicator span {
+    width: 7px;
+    height: 7px;
+    background: #9ca3af;
+    border-radius: 50%;
+    animation: bounce 1.2s infinite;
+  }
+
+  .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-6px); }
+  }
+
+  /* Input row */
+  .input-row {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  #user-input {
+    flex: 1;
+    padding: 0.65rem 0.9rem;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    resize: none;
+    font-family: inherit;
+    line-height: 1.4;
+    background: #fff;
+    transition: border-color 0.15s;
+  }
+
+  #user-input:focus {
+    outline: none;
+    border-color: #1a1a2e;
+  }
+
+  #send-btn {
+    padding: 0.65rem 1.25rem;
+    background: #1a1a2e;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    cursor: pointer;
+    align-self: flex-end;
+    transition: background 0.15s;
+  }
+
+  #send-btn:hover:not(:disabled) { background: #2d2d4e; }
+  #send-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+
+  .empty-state {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    font-size: 0.9rem;
+  }
+
+  .flash-msg {
+    padding: 0.6rem 1rem;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+</style>
+
+<div class="chat-container">
+  <h1>LM Studio Chat</h1>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="flash-msg">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- Model selector -->
+  {% if not models %}
+    <p style="color:#6b7280;">No models found. Make sure LM Studio is running with its server enabled.</p>
+  {% else %}
+    <form class="model-bar" method="POST" action="/">
+      <select name="model" id="model-select">
+        {% for model in models %}
+          <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Load model</button>
+    </form>
+
+    {% if selected_model %}
+      <p class="active-model-label">Active model: <span>{{ selected_model }}</span></p>
+    {% endif %}
+
+    <!-- Chat window -->
+    <div id="chat-window">
+      <div class="empty-state" id="empty-state">Select a model above, then start chatting.</div>
+    </div>
+
+    <!-- Input row -->
+    <div class="input-row">
+      <textarea id="user-input" rows="2" placeholder="Type a message…" {% if not selected_model %}disabled{% endif %}></textarea>
+      <button id="send-btn" {% if not selected_model %}disabled{% endif %}>Send</button>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+  const chatWindow = document.getElementById('chat-window');
+  const userInput  = document.getElementById('user-input');
+  const sendBtn    = document.getElementById('send-btn');
+  const emptyState = document.getElementById('empty-state');
+
+  // Conversation history kept client-side for context
+  let history = [
+    { role: "system", content: "You are a helpful AI." }
+  ];
+
+  function scrollBottom() {
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function appendMessage(role, text) {
+    if (emptyState) emptyState.remove();
+
+    const div = document.createElement('div');
+    div.className = 'message ' + role;
+    div.textContent = text;
+    chatWindow.appendChild(div);
+    scrollBottom();
+    return div;
+  }
+
+  function showTyping() {
+    if (emptyState) emptyState.remove();
+    const ind = document.createElement('div');
+    ind.className = 'typing-indicator';
+    ind.id = 'typing';
+    ind.innerHTML = '<span></span><span></span><span></span>';
+    chatWindow.appendChild(ind);
+    scrollBottom();
+  }
+
+  function hideTyping() {
+    const ind = document.getElementById('typing');
+    if (ind) ind.remove();
+  }
+
+  async function sendMessage() {
+    const text = userInput.value.trim();
+    if (!text) return;
+
+    userInput.value = '';
+    userInput.style.height = '';
+    sendBtn.disabled = true;
+    appendMessage('user', text);
+    showTyping();
+
+    // Build payload — send full history for context
+    const payload = new FormData();
+    payload.append('message', text);
+    payload.append('history', JSON.stringify(history));
+
+    try {
+      const res  = await fetch('/chat', { method: 'POST', body: payload });
+      const data = await res.json();
+      hideTyping();
+
+      if (data.error) {
+        appendMessage('system-note', '⚠ ' + data.error);
+      } else {
+        appendMessage('assistant', data.response);
+        // Update local history
+        history.push({ role: 'user', content: text });
+        history.push({ role: 'assistant', content: data.response });
+      }
+    } catch (err) {
+      hideTyping();
+      appendMessage('system-note', '⚠ Network error — is the server running?');
+    } finally {
+      sendBtn.disabled = false;
+      userInput.focus();
+    }
+  }
+
+  // Send on button click
+  sendBtn && sendBtn.addEventListener('click', sendMessage);
+
+  // Send on Enter (Shift+Enter for newline)
+  userInput && userInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // Auto-grow textarea
+  userInput && userInput.addEventListener('input', function() {
+    this.style.height = '';
+    this.style.height = Math.min(this.scrollHeight, 140) + 'px';
+  });
+</script>
+
+{% endblock %}
